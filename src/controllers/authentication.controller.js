@@ -17,7 +17,8 @@ class AuthenticationController {
         try {
             const { email, password } = req.body;
 
-            const user = await User.findOne({ email });
+            const user = await User.findOne({ email })
+                .populate("roleId", "name");
 
             if (!user)
                 return res.status(StatusCodes.UNAUTHORIZED).json({ success: false, error: "Account does not exist." });
@@ -28,15 +29,21 @@ class AuthenticationController {
                 return res.status(StatusCodes.UNAUTHORIZED).json({ success: false, error: "Wrong password." });
 
             const token = await generateToken(user);
-            const userObject = user.toObject();
-            delete userObject.password;
+
+            const userResponse = {
+                _id: user._id,
+                username: user.username,
+                fullName: user.fullName,
+                profilePicture: user.profilePicture,
+                email: user.email
+            }
 
             return res.status(StatusCodes.OK).json({
                 success: true,
                 message: "Login successfully.",
                 result: {
                     token: token,
-                    data: userObject
+                    data: userResponse
                 },
             });
 

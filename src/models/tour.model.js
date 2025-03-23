@@ -1,16 +1,15 @@
 import mongoose from "mongoose";
 import mongooseDelete from "mongoose-delete";
-import Visibility from "../enums/visibility.enum.js";
 import StatusTour from "../enums/statusTour.enum.js";
 
 const tourSchema = new mongoose.Schema({
-    nameOfTour: {
+    title: {
         type: String
     },
     introduction: {
         type: String
     },
-    tourGuideId: {
+    author: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User"
     },
@@ -39,7 +38,7 @@ const tourSchema = new mongoose.Schema({
     maxParticipants: {
         type: Number
     },
-    bookedParticipants: {
+    totalBookings: {
         type: Number,
         default: 0
     },
@@ -55,11 +54,6 @@ const tourSchema = new mongoose.Schema({
     },
     notInclude: {
         type: String,
-    },
-    visibility: {
-        type: String,
-        enum: Object.values(Visibility),
-        default: "PUBLIC"
     },
     status: {
         type: String,

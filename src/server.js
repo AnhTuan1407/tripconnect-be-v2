@@ -7,6 +7,7 @@ import morgan from "morgan";
 import { Server } from "socket.io";
 import http from "http";
 
+import { swaggerUi, swaggerSpec } from "./config/swagger.config.js";
 
 import connectMongoDB from "./config/db.config.js";
 import routes from "./routes/index.js";
@@ -24,6 +25,9 @@ const io = new Server(server, {
   },
 });
 
+// Swagger
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+console.log("Swagger Docs available at: http://localhost:8080/api-docs");
 
 const startServer = () => {
   app.use(cors({
@@ -34,8 +38,9 @@ const startServer = () => {
   app.use(bodyParser.json());
   app.use(cookieParser());
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
 
-
+  // Routes
   app.use(process.env.API_PREFIX, routes);
 
   app.use(morgan("dev"));

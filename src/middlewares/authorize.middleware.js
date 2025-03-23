@@ -87,7 +87,7 @@ export const checkOwnerPost = async (req, res, next) => {
         }
 
         const post = await Post.findOne({ _id: req.params.id });
-        const user = await User.findOne({ _id: post.userId });
+        const user = await User.findOne({ _id: post.createdBy });
 
         if (!post || user._id.toString() !== req.user.userId) {
             return res.status(StatusCodes.FORBIDDEN).json({
@@ -112,7 +112,7 @@ export const checkOwnerTour = async (req, res, next) => {
         }
 
         const tour = await Tour.findOne({ _id: req.params.id });
-        const tourGuide = await User.findOne({ _id: tour.tourGuideId });
+        const tourGuide = await User.findOne({ _id: tour.author });
 
         if (!tour || tourGuide._id.toString() !== req.user.userId) {
             return res.status(StatusCodes.FORBIDDEN).json({

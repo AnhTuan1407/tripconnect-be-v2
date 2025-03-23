@@ -43,7 +43,7 @@ class UserController {
 
             const userCreated = await User.create(newUser);
 
-            return res.status(StatusCodes.OK).json({
+            return res.status(StatusCodes.CREATED).json({
                 success: true,
                 result: userCreated,
                 message: "Traveler account registration successful."
