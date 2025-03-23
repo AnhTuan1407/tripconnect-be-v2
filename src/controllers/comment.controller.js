@@ -1,7 +1,7 @@
 import { StatusCodes } from "http-status-codes";
 import Comment from "../models/comment.model.js";
 import Post from "../models/post.model.js";
-import User from "../models/user.model.js";
+import Profile from "../models/profile.model.js";
 
 class CommentController {
     // [POST] /api/v1/comments
@@ -14,19 +14,18 @@ class CommentController {
                 return res.status(StatusCodes.NOT_FOUND).json({ success: false, error: "Post not found" });
             }
 
-            const user = await User.findOne({ _id: req.user.userId });
-            if (!user) {
+            const profile = await Profile.findOne({ userId: req.user.userId });
+            if (!profile) {
                 return res.status(StatusCodes.NOT_FOUND).json({
                     success: false,
-                    error: "User not found",
+                    error: "Profile not found",
                 });
             }
-
-            const userId = user._id;
+            const profileId = profile._id;
 
             const newComment = await Comment.create({
                 postId,
-                userId,
+                profileId,
                 content,
                 parentComment: parentComment || null
             });
@@ -46,8 +45,7 @@ class CommentController {
         try {
             const { postId } = req.params;
             const comments = await Comment.find({ postId })
-                .populate("userId", "username fullName profilePicture")
-                .populate("likes", "username fullName")
+                .populate("profileId", "fullName profilePicture")
                 .sort({ createdAt: -1 });
 
             return res.status(StatusCodes.OK).json({
@@ -111,11 +109,13 @@ class CommentController {
         try {
             const { commentId } = req.body;
 
-            const user = await User.findOne({ _id: req.user.userId });
-            if (!user) {
+            const userId = req.user.userId;
+            const profile = await Profile.findOne({ userId: userId });
+
+            if (!profile) {
                 return res.status(StatusCodes.NOT_FOUND).json({
                     success: false,
-                    error: "User not found",
+                    error: "Profile not found",
                 });
             }
 
@@ -127,9 +127,9 @@ class CommentController {
                 });
             }
 
-            const index = comment.likes.indexOf(user._id);
+            const index = comment.likes.indexOf(profile._id);
             if (index === -1) {
-                comment.likes.push(user._id);
+                comment.likes.push(profile._id);
             } else {
                 comment.likes.splice(index, 1);
             }

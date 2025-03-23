@@ -18,19 +18,15 @@ class ProfileController {
                     message: "Profile not found.",
                 });
 
-            if (request.email != user.email || request.phoneNumber != user.phoneNumber) {
-                const existingProfile = await User.findOne({
-                    $or: [{ email: request.email }, { phoneNumber: request.phoneNumber }],
-                    _id: { $ne: id }
-                });
+            const existingProfile = await User.findOne({
+                $or: [{ email: request.email }, { phoneNumber: request.phoneNumber }]
+            });
+            if (existingProfile) {
+                const errors = [];
+                if (existingProfile.email === request.email) errors.push("Email already exists.");
+                if (existingProfile.phoneNumber === request.phoneNumber) errors.push("Phone number already exists.");
 
-                if (existingProfile) {
-                    const errors = [];
-                    if (existingProfile.email === request.email) errors.push("Email already exists.");
-                    if (existingProfile.phoneNumber === request.phoneNumber) errors.push("Phone number already exists.");
-
-                    return res.status(StatusCodes.BAD_REQUEST).json({ success: false, error: errors });
-                }
+                return res.status(StatusCodes.BAD_REQUEST).json({ success: false, error: errors });
             }
 
             const image = req.files ? await uploadSingleImage(req.files) : user.profilePicture;
@@ -59,7 +55,6 @@ class ProfileController {
             return res.status(StatusCodes.OK).json({
                 success: true,
                 message: "Profile updated successfully.",
-                result: updatedProfile,
             });
         } catch (error) {
             return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({

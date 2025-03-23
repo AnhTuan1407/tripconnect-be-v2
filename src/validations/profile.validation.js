@@ -14,14 +14,16 @@ const profileSchema = yup.object({
         .string()
         .matches(/^[0-9]{10,11}$/, "Phone number must be 10-11 digits."),
 
+    address: yup.string().nullable(),
+
+    profilePicture: yup.string().nullable(),
+
     bio: yup
         .string()
-        .max(500, "Bio must not exceed 500 characters."),
+        .max(500, "Bio must not exceed 500 characters.")
+        .nullable(),
 
     active: yup.boolean().default(true),
-
-    dateOfBirth: yup
-        .date()
 });
 
 export { profileSchema };

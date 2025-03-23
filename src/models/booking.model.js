@@ -4,7 +4,7 @@ import MongooseDelete from "mongoose-delete";
 const bookingSchema = new mongoose.Schema({
     travelerId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        ref: "Profile",
     },
     tourId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -12,7 +12,7 @@ const bookingSchema = new mongoose.Schema({
     },
     tourGuideId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        ref: "Profile",
     },
     bookingDate: {
         type: Date,
@@ -43,12 +43,6 @@ const bookingSchema = new mongoose.Schema({
     timeoutAt: {
         type: Date,
     },
-    cancellationDate: {
-        type: Date,
-    },
-    cancellationReason: {
-        type: String
-    }
 },
     { timestamps: true }
 )
