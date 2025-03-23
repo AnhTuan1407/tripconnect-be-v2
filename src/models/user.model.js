@@ -32,6 +32,10 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    coverPhoto: {
+        type: String,
+        default: ''
+    },
     bio: {
         type: String,
         default: ''
@@ -56,16 +60,12 @@ const userSchema = new mongoose.Schema({
     },
     ranking: {
         type: Number,
-        default: 0
+        default: null
     },
     rating: {
         type: Number,
-        default: 0
+        default: null
     },
-    active: {
-        type: Boolean,
-        default: true,
-    }
 },
     { timestamps: true }
 );

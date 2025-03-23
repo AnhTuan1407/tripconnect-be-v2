@@ -1,9 +1,7 @@
 import { StatusCodes } from "http-status-codes";
-import Role from "../enums/role.enum.js";
-import Visibility from "../enums/visibility.enum.js";
 import Tour from "../models/tour.model.js";
-import { uploadImages } from "../utils/uploadImage.util.js";
 import User from "../models/user.model.js";
+import { uploadImages } from "../utils/uploadImage.util.js";
 
 class TourController {
 
@@ -22,25 +20,14 @@ class TourController {
             const imageUrls = req.files ? await uploadImages(req.files) : [];
 
             const newTour = {
-                tourGuideId: user._id,
-                nameOfTour: request.nameOfTour,
-                introduction: request.introduction,
-                destination: request.destination,
-                departureLocation: request.departureLocation,
-                schedule: request.schedule,
-                priceForAdult: request.priceForAdult,
-                priceForYoung: request.priceForYoung,
-                priceForChildren: request.priceForChildren,
-                maxParticipants: request.maxParticipants,
-                duration: request.duration,
-                include: request.include,
-                notInclude: request.notInclude,
+                author: user._id,
+                ...request,
                 imageUrls: imageUrls,
             };
 
             await Tour.create(newTour);
 
-            return res.status(StatusCodes.OK).json({
+            return res.status(StatusCodes.CREATED).json({
                 success: true,
                 message: "Tour created successfully"
             });
@@ -55,18 +42,12 @@ class TourController {
     // [GET] /api/v1/tours
     async getAllTours(req, res) {
         try {
-            const role = req.user?.role || false;
-            let filter = { visibility: Visibility.PUBLIC };
-            if (role === Role.ADMIN) {
-                filter = {};
-            }
-
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 10;
             const skip = (page - 1) * limit;
 
-            const tours = await Tour.find(filter).skip(skip).limit(limit)
-                .populate("tourGuideId", "username fullName ranking rating");
+            const tours = await Tour.find().skip(skip).limit(limit)
+                .populate("author", "_id username fullName ranking rating");
             const totalTours = await Tour.countDocuments();
 
             return res.status(StatusCodes.OK).json({
@@ -91,7 +72,8 @@ class TourController {
     async getTourById(req, res) {
         try {
             const id = req.params.id;
-            const tour = await Tour.findById(id);
+            const tour = await Tour.findById(id)
+                .populate("author", "_id username fullName ranking rating");
 
             if (!tour) {
                 return res.status(StatusCodes.NOT_FOUND).json({
@@ -124,7 +106,7 @@ class TourController {
                 });
             }
 
-            const requestData = req.body;
+            const request = req.body;
             let imageUrls = tour.imageUrls;
             if (req.files && req.files.length > 0) {
                 imageUrls = await uploadImages(req.files);
@@ -132,7 +114,7 @@ class TourController {
 
             await Tour.findByIdAndUpdate(
                 id,
-                { $set: { ...requestData, imageUrls } },
+                { $set: { ...request, imageUrls } },
                 { new: true }
             );
 
@@ -153,7 +135,8 @@ class TourController {
     async deleteTour(req, res) {
         try {
             const id = req.params.id;
-            const tour = await Tour.findById(id);
+            const tour = await Tour.findById(id)
+                .populate("author", "_id username fullName ranking rating");
             if (!tour) {
                 return res.status(StatusCodes.NOT_FOUND).json({
                     success: false,
@@ -186,7 +169,7 @@ class TourController {
                 });
             }
 
-            const tours = await Tour.find({ tourGuideId: user._id });
+            const tours = await Tour.find({ author: user._id });
 
             return res.status(StatusCodes.OK).json({
                 success: true,
@@ -216,7 +199,7 @@ class TourController {
             const formattedQuery = searchQuery.replace(/[^a-zA-Z0-9 ]/g, " ");
             let tours = await Tour.find(
                 { $text: { $search: formattedQuery } }
-            ).populate("tourGuideId", "username fullName ranking rating");
+            ).populate("author", "_id username fullName ranking rating");
 
             if (tours.length === 0) {
                 const regexPattern = searchQuery.split("").join(".*");

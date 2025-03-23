@@ -27,6 +27,8 @@ const userSchema = yup.object({
 
     profilePicture: yup.string().nullable(),
 
+    coverPhoto: yup.string().nullable(),
+
     bio: yup
         .string()
         .max(500, "Bio must not exceed 500 characters.")

@@ -22,20 +22,14 @@ class PostController {
             const imageUrls = req.files ? await uploadImages(req.files) : [];
 
             const newPost = {
-                userId: user._id,
-                hashtag: request.hashtag,
-                taggedUser: request.taggedUser,
-                content: request.content,
-                location: request.location,
-                imageUrls: imageUrls,
-                visibility: request.visibility,
-                activeComment: request.activeComment,
-                tourId: request.tourId
+                createdBy: user._id,
+                ...request,
+                imageUrls,
             }
 
             await Post.create(newPost);
 
-            return res.status(StatusCodes.OK).json({
+            return res.status(StatusCodes.CREATED).json({
                 success: true,
                 message: "Post create successfully"
             })
@@ -50,21 +44,14 @@ class PostController {
     // [GET] /api/v1/posts
     async getAllPosts(req, res) {
         try {
-            const role = req.user?.role || false;
-            let filter = { visibility: Visibility.PUBLIC };
-            if (role == Role.ADMIN) {
-                filter = {};
-            }
-
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 10;
             const skip = (page - 1) * limit;
 
-            const posts = await Post.find(filter).skip(skip).limit(limit)
-                .populate("userId", "username fullName")
-                .populate("taggedUser", "username fullName")
-                .populate("likes", "username fullName")
-                .populate("tourId", "nameOfTour destination")
+            const posts = await Post.find().skip(skip).limit(limit)
+                .populate("createdBy", "_id username fullName")
+                .populate("likes", "_id username fullName")
+                .populate("tourAttachment", "_id title destination introduction imageUrls")
                 .exec();
 
             const totalPosts = await Post.countDocuments();
@@ -89,18 +76,10 @@ class PostController {
     // [GET] /api/v1/posts/:id
     async getPostById(req, res) {
         try {
-            const role = req.user?.role || false;
-            const id = req.params.id;
-            const filter = { _id: id };
-            if (role !== Role.ADMIN) {
-                filter.visibility = Visibility.PUBLIC;
-            }
-
-            const post = await Post.findOne(filter)
-                .populate("userId", "username fullName")
-                .populate("taggedUser", "username fullName")
-                .populate("likes", "username fullName")
-                .populate("tourId", "nameOfTour destination")
+            const post = await Post.findOne()
+                .populate("createdBy", "_id username fullName")
+                .populate("likes", "_id username fullName")
+                .populate("tourAttachment", "_id title destination introduction imageUrls")
                 .exec();
 
 
@@ -147,14 +126,8 @@ class PostController {
                 id,
                 {
                     $set: {
-                        hashtag: requestData.hashtag || post.hashtag,
-                        taggedUser: requestData.taggedUser || post.taggedUser,
-                        content: requestData.content || post.content,
-                        location: requestData.location || post.location,
-                        visibility: requestData.visibility || post.visibility,
-                        activeComment: requestData.activeComment || post.activeComment,
+                        ...requestData,
                         imageUrls: imageUrls,
-                        tourId: requestData.tourId
                     },
                 },
                 { new: true }
@@ -250,7 +223,7 @@ class PostController {
     async setPrivacy(req, res) {
         try {
             const { id } = req.params;
-            const { visibility, activeComment } = req.body;
+            const { activeComment } = req.body;
 
             const post = await Post.findOne({ _id: id });
 
@@ -265,7 +238,6 @@ class PostController {
                 id,
                 {
                     $set: {
-                        visibility: visibility || post.visibility,
                         activeComment: activeComment || post.activeComment
                     }
                 }
@@ -296,8 +268,9 @@ class PostController {
                 });
             }
 
-            const posts = await Post.find({ userId: user._id })
-                .populate('taggedUser', "username fullName");
+            const posts = await Post.find({ createdBy: user._id })
+                .populate("likes", "_id username fullName")
+                .populate("tourAttachment", "_id title destination introduction imageUrls")
             if (!posts) {
                 return res.status(StatusCodes.NOT_FOUND).json({
                     success: false,
@@ -339,10 +312,9 @@ class PostController {
             }
 
             const newPost = await Post.create({
-                userId: user._id,
+                createdBy: user._id,
                 caption: caption || "",
                 sharedFrom: postId,
-                visibility: visibility || Visibility.PUBLIC,
             });
 
             return res.status(StatusCodes.CREATED).json({
