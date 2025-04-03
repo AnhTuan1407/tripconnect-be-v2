@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import mongooseDelete from "mongoose-delete";
 
 const CalendarSchema = new mongoose.Schema({
-    tourGuideId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    tourGuideId: { type: mongoose.Schema.Types.ObjectId, ref: "Profile" },
     dates: [
         {
             date: { type: Date },

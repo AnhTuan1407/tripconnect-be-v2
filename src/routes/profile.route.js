@@ -2,14 +2,105 @@ import express from "express";
 import profileController from "../controllers/profile.controller.js";
 import { authenticated, authorize, checkOwnerUserId } from "../middlewares/authorize.middleware.js";
 import upload from '../middlewares/multer.middleware.js';
-import { validateFormData } from "../middlewares/validate.middleware.js";
-import { profileSchema } from "../validations/profile.validation.js";
+import { validate } from "../middlewares/validate.middleware.js";
+import { userSchema } from "../validations/user.validation.js";
+
+const router = express.Router();
 
 /**
  * @swagger
  * tags:
  *   name: Profile
  *   description: API for managing user profiles
+ */
+
+// Follow/Unfollow a user
+/**
+ * @swagger
+ * /profiles/follow/{id}:
+ *   post:
+ *     summary: Follow or unfollow a user
+ *     description: Toggle follow/unfollow for a user by their ID.
+ *     tags:
+ *       - Profile
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the user to follow/unfollow
+ *     responses:
+ *       200:
+ *         description: Follow/unfollow action completed successfully
+ *       400:
+ *         description: Invalid request
+ *       404:
+ *         description: User not found
+ */
+
+// Get followers of a user
+/**
+ * @swagger
+ * /profiles/followers/{id}:
+ *   get:
+ *     summary: Get followers of a user
+ *     description: Retrieve the list of followers for a user by their ID.
+ *     tags:
+ *       - Profile
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the user to get followers for
+ *     responses:
+ *       200:
+ *         description: A list of followers
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Profile'
+ *       404:
+ *         description: User not found
+ */
+
+// Get following of a user
+/**
+ * @swagger
+ * /profiles/following/{id}:
+ *   get:
+ *     summary: Get following of a user
+ *     description: Retrieve the list of users that a user is following by their ID.
+ *     tags:
+ *       - Profile
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the user to get following for
+ *     responses:
+ *       200:
+ *         description: A list of users being followed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Profile'
+ *       404:
+ *         description: User not found
  */
 
 /**
@@ -195,13 +286,24 @@ import { profileSchema } from "../validations/profile.validation.js";
  *         description: Profile not found
  */
 
-const router = express.Router();
-
-router.put("/:id", authenticated, upload.array("image"), validateFormData(profileSchema), checkOwnerUserId, profileController.updateProfile);
+router.put(
+    "/:id",
+    authenticated,
+    upload.fields([
+        { name: "profilePicture", maxCount: 1 },
+        { name: "coverPhoto", maxCount: 1 },
+    ]),
+    checkOwnerUserId,
+    profileController.updateProfile
+);
 router.delete("/:id", authenticated, checkOwnerUserId, profileController.deleteProfile);
 router.post("/active", authenticated, authorize("ADMIN"), profileController.activeProfile);
+router.get("/photos", authenticated, profileController.getProfilePhotos);
 router.get("/myInfo", authenticated, profileController.myInfo);
 router.get("/search", profileController.searchProfiles);
+router.get("/following", authenticated, profileController.getFollowings);
+router.get("/followers", authenticated, profileController.getFollowers);
 router.get("/:id", profileController.getProfileById);
+router.post("/follow/:id", authenticated, profileController.followUser);
 
 export default router;

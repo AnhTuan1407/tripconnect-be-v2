@@ -3,15 +3,16 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
+import http from "http";
 import morgan from "morgan";
 import { Server } from "socket.io";
-import http from "http";
-
-import { swaggerUi, swaggerSpec } from "./config/swagger.config.js";
+import { swaggerSpec, swaggerUi } from "./config/swagger.config.js";
 
 import connectMongoDB from "./config/db.config.js";
 import routes from "./routes/index.js";
-import Message from "./models/message.model.js";
+
+import checkExpiredBookings from "./jobs/cron.job.js";
+import { consumeNotifications } from "./consumers/notification.consumer.js";
 
 dotenv.config();
 
@@ -20,18 +21,18 @@ const PORT = process.env.PORT || 8080;
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: process.env.CORS_ORIGINS,
     methods: ["GET", "POST"],
   },
 });
 
 // Swagger
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-console.log("Swagger Docs available at: http://localhost:8080/api-docs");
+console.log(`Swagger Docs available at: http://localhost:${process.env.PORT}/api-docs`);
 
 const startServer = () => {
   app.use(cors({
-    origin: "*",
+    origin: process.env.CORS_ORIGINS,
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   }));
@@ -52,30 +53,56 @@ const startServer = () => {
     console.log(` 🌐 Local: http://localhost:${PORT}/`);
   });
 
+  // Cron Jobs
+  checkExpiredBookings();
+
+  // Consumer notification
+  consumeNotifications().catch(console.error);
+
+  // Socket io
+  global.oneLineUses = [];
+
   io.on("connection", (socket) => {
-    console.log(`⚡ New client connected: ${socket.id}`);
+    socket.on("addNewUser", (userId) => {
+      !oneLineUses.some(user => user.userId === userId) &&
+        oneLineUses.push({ userId, socketId: socket.id });
 
-    socket.on("joinConversation", (conversationId) => {
-      socket.join(conversationId);
-      console.log(`Client joined conversation: ${conversationId}`);
+      console.log("👤Connected Users", global.oneLineUses);
+
+      io.emit("getUsers", global.oneLineUses);
     });
+
+    // Notification
+    socket.on("sendNotification", ({ receiverId, notification }) => {
+      const recipient = oneLineUses.find(user => user.userId === receiverId);
+
+      if (recipient) {
+        io.to(recipient.socketId).emit("new_notification", notification);
+        console.log("🔔 Sent notification to:", receiverId);
+      }
+    });
+
     //Listen event client send message
-    socket.on("sendMessage", async ({ conversationId, sender, content }) => {
-      try {
-        const message = new Message({ conversationId, sender, content });
-        await message.save();
+    socket.on("sendMessage", (message) => {
+      const user = oneLineUses.find(user => user.userId === message.recipientId);
 
-        // receive message
-        io.to(conversationId).emit("receiveMessage", message);
-
-      } catch (error) {
-        console.error("Error sending message:", error);
+      if (user) {
+        console.log("📩 Message sent and notification");
+        io.to(user.socketId).emit("getMessage", message);
+        io.to(user.socketId).emit("notification", {
+          senderId: message.senderId,
+          isRead: false,
+          date: new Date(),
+        });
       }
     });
 
     //Listen event client disconnect
     socket.on("disconnect", () => {
-      console.log(`❌ Client disconnected: ${socket.id}`);
+      global.oneLineUses = global.oneLineUses.filter(user => user.socketId !== socket.id);
+      console.log("❌ Disconnected Users", global.oneLineUses);
+
+      io.emit("getUsers", global.oneLineUses);
     });
   });
 };

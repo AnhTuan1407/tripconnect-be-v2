@@ -38,6 +38,9 @@ const tourSchema = new mongoose.Schema({
     maxParticipants: {
         type: Number
     },
+    availableSlots: {
+        type: Number
+    },
     totalBookings: {
         type: Number,
         default: 0
@@ -50,10 +53,10 @@ const tourSchema = new mongoose.Schema({
         default: []
     },
     include: {
-        type: String,
+        type: [String],
     },
     notInclude: {
-        type: String,
+        type: [String],
     },
     status: {
         type: String,
@@ -61,7 +64,7 @@ const tourSchema = new mongoose.Schema({
         default: "ACTIVE"
     },
 },
-    { timestamps: true }
+    { timestamps: true, versionKey: false }
 );
 
 tourSchema.plugin(mongooseDelete, { deletedAt: true, overrideMethods: true });

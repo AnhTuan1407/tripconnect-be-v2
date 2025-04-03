@@ -1,9 +1,8 @@
 import { StatusCodes } from "http-status-codes";
-import Role from "../enums/role.enum.js";
-import Visibility from "../enums/visibility.enum.js";
 import Post from "../models/post.model.js";
 import User from "../models/user.model.js";
 import { uploadImages } from "../utils/uploadImage.util.js";
+import notificationController from "../controllers/notification.controller.js";
 
 class PostController {
 
@@ -27,11 +26,19 @@ class PostController {
                 imageUrls,
             }
 
-            await Post.create(newPost);
+            const createdPost = await Post.create(newPost)
+
+            const post = await Post.findById(createdPost._id)
+                .populate("createdBy", "_id username fullName profilePicture")
+                .populate("likes", "_id username fullName")
+                .populate("tourAttachment", "_id title destination introduction imageUrls")
+                .sort({ "createdAt": -1 })
+                .exec();
 
             return res.status(StatusCodes.CREATED).json({
                 success: true,
-                message: "Post create successfully"
+                message: "Post create successfully",
+                result: post,
             })
         } catch (error) {
             return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -49,9 +56,10 @@ class PostController {
             const skip = (page - 1) * limit;
 
             const posts = await Post.find().skip(skip).limit(limit)
-                .populate("createdBy", "_id username fullName")
+                .populate("createdBy", "_id username fullName profilePicture")
                 .populate("likes", "_id username fullName")
                 .populate("tourAttachment", "_id title destination introduction imageUrls")
+                .sort({ "createdAt": -1 })
                 .exec();
 
             const totalPosts = await Post.countDocuments();
@@ -61,6 +69,7 @@ class PostController {
                     totalPosts: totalPosts,
                     totalPage: Math.ceil(totalPosts / limit),
                     currentPage: page,
+                    nextPage: page + 1,
                     limit: limit,
                     data: posts
                 },
@@ -76,8 +85,9 @@ class PostController {
     // [GET] /api/v1/posts/:id
     async getPostById(req, res) {
         try {
-            const post = await Post.findOne()
-                .populate("createdBy", "_id username fullName")
+            const { id } = req.params;
+            const post = await Post.findOne({ _id: id })
+                .populate("createdBy", "_id username fullName profilePicture")
                 .populate("likes", "_id username fullName")
                 .populate("tourAttachment", "_id title destination introduction imageUrls")
                 .exec();
@@ -160,11 +170,12 @@ class PostController {
                 })
             }
 
-            await Post.delete({ _id: id });
+            const postDeleted = await Post.findOneAndDelete({ _id: id });
 
             return res.status(StatusCodes.OK).json({
                 success: true,
-                message: "Post has been deleted",
+                message: "Post delete successfully",
+                result: postDeleted,
             })
         } catch (error) {
             return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -174,7 +185,7 @@ class PostController {
         }
     }
 
-    // [POST] /api/v1/post/like
+    // [POST] /api/v1/posts/like
     async likePost(req, res) {
         try {
             const { postId } = req.body;
@@ -206,6 +217,24 @@ class PostController {
 
             await post.save();
 
+            // Send notification
+            if (user._id != post.createdBy) {
+                await notificationController.sendNotification({
+                    body: {
+                        type: "LIKE",
+                        senderId: user._id,
+                        receiverId: post.createdBy,
+                        relatedId: post._id,
+                        relatedModel: "Post",
+                        message: `Người dùng ${user.username} đã thích bài viết của bạn`,
+                    },
+                }, {
+                    status: () => ({
+                        json: () => { },
+                    }),
+                });
+            }
+
             return res.status(StatusCodes.OK).json({
                 success: true,
                 message: index === -1 ? "Post liked" : "Post unliked",
@@ -219,7 +248,7 @@ class PostController {
         }
     }
 
-    // [PUT] /api/v1/post/privacy/:id
+    // [PUT] /api/v1/posts/privacy/:id
     async setPrivacy(req, res) {
         try {
             const { id } = req.params;
@@ -257,7 +286,7 @@ class PostController {
         }
     }
 
-    // [GET] /api/v1/post/my-posts
+    // [GET] /api/v1/posts/my-posts
     async getAllMyPosts(req, res) {
         try {
             const user = await User.findOne({ _id: req.user.userId });
@@ -327,6 +356,152 @@ class PostController {
                 success: false,
                 error: error.message
             })
+        }
+    }
+
+    // [GET] /api/v1/posts/search?q=
+
+    // db.posts.createIndex({ hashtag: "text", content: "text" })
+    async searchPost(req, res) {
+        try {
+            const searchQuery = req.query.q?.trim();
+
+            if (!searchQuery) {
+                return res.status(StatusCodes.BAD_REQUEST).json({
+                    success: false,
+                    error: "Search query is required",
+                });
+            }
+
+            const formattedQuery = searchQuery.replace(/[^a-zA-Z0-9 ]/g, " ");
+
+            let posts = [];
+
+            posts = await Post.find(
+                { $text: { $search: searchQuery } },
+                { score: { $meta: "textScore" } }
+            )
+                .sort({ score: { $meta: "textScore" } })
+                .populate("createdBy", "_id username fullName profilePicture")
+                .populate("likes", "_id username fullName")
+                .populate("tourAttachment", "_id title destination introduction imageUrls");
+
+            if (posts.length === 0) {
+                posts = await Post.find({
+                    $or: [
+                        { content: { $regex: formattedQuery, $options: "i" } },
+                        { hashtag: { $regex: formattedQuery, $options: "i" } },
+                    ],
+                })
+                    .populate("createdBy", "_id username fullName profilePicture")
+                    .populate("likes", "_id username fullName")
+                    .populate("tourAttachment", "_id title destination introduction imageUrls");
+            }
+
+            if (posts.length === 0) {
+                return res.status(StatusCodes.NOT_FOUND).json({
+                    success: false,
+                    error: "No posts found matching the search query",
+                });
+            }
+
+            return res.status(StatusCodes.OK).json({
+                success: true,
+                result: posts,
+            });
+        } catch (error) {
+            return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+                success: false,
+                error: error.message,
+            });
+        }
+    }
+
+    // [GET] /api/v1/posts/profile/:username
+    async getAllPostsByUsername(req, res) {
+        try {
+            const page = parseInt(req.query.page) || 1;
+            const limit = parseInt(req.query.limit) || 10;
+            const skip = (page - 1) * limit;
+
+            const username = req.params.username;
+
+            const user = await User.findOne({ username });
+            if (!user) {
+                return res.status(StatusCodes.NOT_FOUND).json({
+                    success: false,
+                    error: "User not found",
+                });
+            }
+
+            const posts = await Post.find({ createdBy: user._id }).skip(skip).limit(limit)
+                .populate("createdBy", "_id username fullName profilePicture")
+                .populate("likes", "_id username fullName")
+                .populate("tourAttachment", "_id title destination introduction imageUrls")
+                .sort({ "createdAt": -1 })
+
+            if (!posts) {
+                return res.status(StatusCodes.NOT_FOUND).json({
+                    success: false,
+                    error: "Post not found"
+                })
+            }
+
+            const totalPosts = await Post.find({ createdBy: user._id }).countDocuments();
+
+            return res.status(StatusCodes.OK).json({
+                success: true,
+                result: {
+                    totalPosts: totalPosts,
+                    totalPage: Math.ceil(totalPosts / limit),
+                    currentPage: page,
+                    nextPage: page + 1,
+                    limit: limit,
+                    data: posts
+                }
+            })
+        } catch (error) {
+            return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+                success: false,
+                error: error.message
+            })
+        }
+    }
+
+    // [GET] /api/v1/post/hashtag
+    async getPostsByHashtag(req, res) {
+        try {
+            const { hashtag } = req.body;
+
+            if (!hashtag) {
+                return res.status(StatusCodes.BAD_REQUEST).json({
+                    success: false,
+                    error: "Hashtag is required and must be a string.",
+                });
+            }
+
+            const posts = await Post.find({ hashtag: hashtag })
+                .populate("createdBy", "_id username fullName profilePicture")
+                .populate("likes", "_id username fullName")
+                .populate("tourAttachment", "_id title destination introduction imageUrls")
+                .sort({ createdAt: -1 });
+
+            if (posts.length === 0) {
+                return res.status(StatusCodes.NOT_FOUND).json({
+                    success: false,
+                    error: "No posts found with the given hashtag.",
+                });
+            }
+
+            return res.status(StatusCodes.OK).json({
+                success: true,
+                result: posts,
+            });
+        } catch (error) {
+            return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+                success: false,
+                error: error.message,
+            });
         }
     }
 }
