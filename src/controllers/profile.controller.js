@@ -1,6 +1,9 @@
+import axios from "axios";
 import { StatusCodes } from "http-status-codes";
+import Post from "../models/post.model.js";
 import User from "../models/user.model.js";
 import { uploadSingleImage } from "../utils/uploadImage.util.js";
+import notificationController from "./notification.controller.js";
 
 class ProfileController {
 
@@ -29,7 +32,15 @@ class ProfileController {
                 return res.status(StatusCodes.BAD_REQUEST).json({ success: false, error: errors });
             }
 
-            const image = req.files ? await uploadSingleImage(req.files) : user.profilePicture;
+            // Upload profile picture
+            const profilePicture = req.files?.profilePicture
+                ? await uploadSingleImage(req.files.profilePicture)
+                : user.profilePicture;
+
+            // Upload cover photo
+            const coverPhoto = req.files?.coverPhoto
+                ? await uploadSingleImage(req.files.coverPhoto)
+                : user.coverPhoto;
 
             const today = new Date();
             const minAgeDate = new Date(today.getFullYear() - 13, today.getMonth(), today.getDate());
@@ -46,7 +57,8 @@ class ProfileController {
                     phoneNumber: request.phoneNumber || user.phoneNumber,
                     address: request.address || user.address,
                     bio: request.bio || user.bio,
-                    profilePicture: image,
+                    profilePicture: profilePicture,
+                    coverPhoto: coverPhoto,
                     dateOfBirth: request.dateOfBirth || user.dateOfBirth,
                 },
                 { new: true }
@@ -55,6 +67,7 @@ class ProfileController {
             return res.status(StatusCodes.OK).json({
                 success: true,
                 message: "Profile updated successfully.",
+                result: updatedProfile,
             });
         } catch (error) {
             return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -171,12 +184,12 @@ class ProfileController {
         }
     };
 
-    // [GET] /api/v1/profiles/search?q=
+    // [GET] /api/v1/profiles/search?name=
 
     // db.users.createIndex({ fullName: "text" }) để tìm kiếm
     async searchProfiles(req, res) {
         try {
-            const searchQuery = req.query.q?.trim();
+            const searchQuery = req.query.name?.trim();
             if (!searchQuery) {
                 return res.status(StatusCodes.BAD_REQUEST).json({
                     success: false,
@@ -185,16 +198,31 @@ class ProfileController {
             }
 
             const formattedQuery = searchQuery.replace(/[^a-zA-Z0-9 ]/g, " ");
-            let profiles = await User.find(
-                { $text: { $search: formattedQuery } },
-                { score: { $meta: "textScore" } }
-            ).select("-password").sort({ score: { $meta: "textScore" } });
 
+            let profiles = [];
+
+            profiles = await User.find(
+                { $text: { $search: searchQuery } },
+                { score: { $meta: "textScore" } }
+            ).select("-password")
+                .sort({ score: { $meta: "textScore" } })
+            // .populate("followers", "_id username fullName profilePicture")
+            // .populate("following", "_id username fullName profilePicture")
 
             if (profiles.length === 0) {
-                const regexPattern = searchQuery.split("").join(".*");
                 profiles = await User.find({
-                    fullName: { $regex: regexPattern, $options: "i" },
+                    $or: [
+                        { fullName: { $regex: formattedQuery, $options: "i" } },
+                    ],
+                }).select("-password")
+                // .populate("followers", "_id username fullName profilePicture")
+                // .populate("following", "_id username fullName profilePicture")
+            }
+
+            if (profiles.length === 0) {
+                return res.status(StatusCodes.NOT_FOUND).json({
+                    success: false,
+                    error: "No profile found matching the search query",
                 });
             }
 
@@ -210,6 +238,164 @@ class ProfileController {
             });
         }
     };
+
+    // [POST] /api/v1/profiles/follow/:id
+    async followUser(req, res) {
+        try {
+            const currentUserId = req.user.userId;
+            const targetUserId = req.params.id;
+
+            if (currentUserId === targetUserId) {
+                return res.status(StatusCodes.BAD_REQUEST).json({
+                    success: false,
+                    error: "You cannot follow yourself.",
+                });
+            }
+
+            const targetUser = await User.findById(targetUserId);
+            if (!targetUser) {
+                return res.status(StatusCodes.NOT_FOUND).json({
+                    success: false,
+                    error: "User not found.",
+                });
+            }
+
+            const currentUser = await User.findById(currentUserId);
+
+            if (targetUser.followers.includes(currentUserId)) {
+                // Unfollow
+                targetUser.followers = targetUser.followers.filter((id) => id.toString() !== currentUserId);
+                currentUser.followings = currentUser.followings.filter((id) => id.toString() !== targetUserId);
+
+                await targetUser.save();
+                await currentUser.save();
+
+                return res.status(StatusCodes.OK).json({
+                    success: true,
+                    message: "Unfollowed the user successfully.",
+                });
+            } else {
+                // Follow
+                targetUser.followers.push(currentUserId);
+                currentUser.followings.push(targetUserId);
+
+                await targetUser.save();
+                await currentUser.save();
+
+                // Send notification
+                await notificationController.sendNotification({
+                    body: {
+                        type: "FOLLOW",
+                        senderId: currentUserId,
+                        receiverId: targetUserId,
+                        relatedId: currentUserId,
+                        relatedModel: "User",
+                        message: `Người dùng ${currentUserId} đã follow bạn`
+                    },
+                }, {
+                    status: () => ({
+                        json: () => { },
+                    }),
+                });
+
+                return res.status(StatusCodes.OK).json({
+                    success: true,
+                    message: "Followed the user successfully.",
+                });
+            }
+        } catch (error) {
+            return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+                success: false,
+                error: error.message,
+            });
+        }
+    }
+
+    // [GET] /api/v1/profiles/followers
+    async getFollowers(req, res) {
+        try {
+            const userId = req.user.userId;
+
+            const user = await User.findById(userId).populate("followers", "_id username fullName profilePicture");
+            if (!user) {
+                return res.status(StatusCodes.NOT_FOUND).json({
+                    success: false,
+                    error: "User not found.",
+                });
+            }
+
+            return res.status(StatusCodes.OK).json({
+                success: true,
+                result: user.followers,
+            });
+        } catch (error) {
+            return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+                success: false,
+                error: error.message,
+            });
+        }
+    }
+
+    // [GET] /api/v1/profiles/following
+    async getFollowings(req, res) {
+        try {
+            const userId = req.user.userId;
+
+            const user = await User.findById(userId).populate("followings", "_id username fullName profilePicture");
+            if (!user) {
+                return res.status(StatusCodes.NOT_FOUND).json({
+                    success: false,
+                    error: "User not found.",
+                });
+            }
+
+            return res.status(StatusCodes.OK).json({
+                success: true,
+                result: user.followings,
+            });
+        } catch (error) {
+            return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+                success: false,
+                error: error.message,
+            });
+        }
+    }
+
+    // [GET] /api/v1/profiles/photos
+    async getProfilePhotos(req, res) {
+        try {
+            const userId = req.user.userId;
+
+            const user = await User.findById(userId).select("profilePicture coverPhoto");
+            if (!user) {
+                return res.status(StatusCodes.NOT_FOUND).json({
+                    success: false,
+                    error: "User not found.",
+                });
+            }
+
+            const posts = await Post.find({ createdBy: userId }).select("imageUrls");
+            const postImages = posts.reduce((acc, post) => {
+                return acc.concat(post.imageUrls);
+            }, []);
+
+            const allPhotos = {
+                profilePicture: user.profilePicture,
+                coverPhoto: user.coverPhoto,
+                postImages,
+            }
+
+            return res.status(StatusCodes.OK).json({
+                success: true,
+                result: allPhotos,
+            });
+        } catch (error) {
+            return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+                success: false,
+                error: error.message,
+            });
+        }
+    }
 };
 
 export default new ProfileController;

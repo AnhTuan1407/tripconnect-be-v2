@@ -3,7 +3,7 @@ import RoleModel from "../models/role.model.js";
 import InvalidatedToken from "../models/invalidated.token.model.js";
 
 export const generateToken = async (user) => {
-    const role = await RoleModel.findOne({ _id: user.roleId });
+    const role = await RoleModel.findOne({ _id: user.role });
     const token = jwt.sign(
         {
             userId: user._id,
@@ -12,7 +12,7 @@ export const generateToken = async (user) => {
         process.env.SECRET_KEY,
         {
             algorithm: 'HS512',
-            expiresIn: "1h",
+            expiresIn: "24h",
         }
     );
     return token;
