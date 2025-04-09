@@ -2,13 +2,13 @@ import amqp from "amqplib";
 import { StatusCodes } from "http-status-codes";
 import { ProductCode, VNPay, VnpLocale, dateFormat, ignoreLogger } from "vnpay";
 import vnpayConfig from "../config/vnpay.config.js";
+import notificationController from "../controllers/notification.controller.js";
 import Booking from "../models/booking.model.js";
 import Payment from "../models/payment.model.js";
 import Tour from "../models/tour.model.js";
+import User from "../models/user.model.js";
 import { releaseSlots } from "../services/booking.service.js";
 import { sendEmail } from "../services/email.service.js";
-import User from "../models/user.model.js";
-import notificationController from "../controllers/notification.controller.js";
 
 const QUEUE_NAME = "PAYMENT_QUEUE";
 
@@ -165,8 +165,8 @@ async function processVnpayCallback(vnpParams, res) {
             <p>Bạn đã đặt tour thành công. Dưới đây là thông tin booking của bạn:</p>
             <ul>
                 <li><strong>Tour:</strong> ${tour.title}</li>
-                <li><strong>Ngày bắt đầu:</strong> ${booking.startDay}</li>
-                <li><strong>Ngày kết thúc:</strong> ${booking.endDay}</li>
+                <li><strong>Ngày bắt đầu:</strong> ${booking.startDate}</li>
+                <li><strong>Ngày kết thúc:</strong> ${booking.endDate}</li>
                 <li><strong>Số người:</strong> ${booking.adults + booking.youths + booking.children}</li>
                 <li><strong>Tổng tiền:</strong> ${booking.totalAmount} VND</li>
             </ul>
