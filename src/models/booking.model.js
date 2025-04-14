@@ -26,7 +26,7 @@ const bookingSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ["PENDING", "PAID", "FAILED", "CANCELED", "TIMEOUT", "COMPLETED", "WAITING_CONFIRM"],
+        enum: ["PENDING", "PAID", "CANCELED", "COMPLETED", "WAITING_CONFIRM"],
         default: "PENDING",
     },
     paymentStatus: {
@@ -49,9 +49,42 @@ const bookingSchema = new mongoose.Schema({
     depositAmount: {
         type: Number,
     },
+    cancellationReason: {
+        type: String,
+        default: ""
+    },
+    isReview: {
+        type: Boolean,
+        default: "false"
+    },
     timeoutAt: {
         type: Date,
         index: true,
+    },
+    fullName: {
+        type: String,
+    },
+    country: {
+        type: String,
+    },
+    phoneNumber: {
+        type: String,
+    },
+    email: {
+        type: String,
+    },
+    address: {
+        type: String,
+    },
+    city: {
+        type: String,
+    },
+    note: {
+        type: String,
+    },
+    isPayLater: {
+        type: Boolean,
+        default: false,
     },
 },
     { timestamps: true, versionKey: false }
